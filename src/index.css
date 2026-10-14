@@ -1,8 +1,27 @@
-﻿:root { font-family: Inter, system-ui, sans-serif; color: #202633; background: #f5f6fa; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+/* Light palette shared with frontend_technical_assessment. */
+:root {
+  --app-bg: #f5f8ff;
+  --panel-bg: #ffffff;
+  --panel-border: #dbe7ff;
+  --field-bg: #f8fbff;
+  --field-border: #cbd8f1;
+  --text-strong: #10213f;
+  --text-muted: #62708a;
+  --accent: #2563eb;
+  --accent-soft: #e8f0ff;
+  --success: #059669;
+  --success-text: #047857;
+  --success-soft: #e7f5ec;
+  color-scheme: light;
+}
+:root { font-family: Inter, system-ui, sans-serif; color: var(--text-strong); background: var(--app-bg); font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .65; }
-:focus-visible { outline: 3px solid #829bff; outline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 
+
+input, textarea, select { background: var(--field-bg); color: var(--text-strong); }
+input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 1; }

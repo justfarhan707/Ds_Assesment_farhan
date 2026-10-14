@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import { ConversationWorkspace } from './components/ConversationWorkspace';
 import './App.css';
 import { KnowledgeWorkspace } from './components/KnowledgeWorkspace';
+
+const SystemDesignWorkspace = lazy(() => import('./components/SystemDesignWorkspace'));
 
 type Brand = { id: string; name: string };
 function App() {
@@ -16,7 +18,7 @@ function App() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandReady, setBrandReady] = useState(false);
   const [brandError, setBrandError] = useState('');
-  const [page, setPage] = useState<'conversations' | 'knowledge'>('conversations');
+  const [page, setPage] = useState<'conversations' | 'knowledge' | 'design'>('conversations');
   useEffect(() => {
     let active = true;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
@@ -53,10 +55,10 @@ function App() {
     finally { setBusy(false); }
   }
   if (ready && session) return <main>
-    <header className="app-header workspace-header"><div className="brand-logo"><span className="logo-mark">✦</span> CX Assist</div><nav aria-label="Main navigation"><button className={`nav-button ${page === 'conversations' ? 'active-nav' : ''}`} aria-current={page === 'conversations' ? 'page' : undefined} onClick={() => setPage('conversations')}>Conversations</button><button className={`nav-button ${page === 'knowledge' ? 'active-nav' : ''}`} aria-current={page === 'knowledge' ? 'page' : undefined} onClick={() => setPage('knowledge')}>Knowledge Base</button></nav><div className="header-account"><span className="brand-label">{brands.length === 1 ? brands[0].name : 'Brand workspace'}</span><button className="secondary compact" onClick={signOut} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button></div></header>
+    <header className="app-header workspace-header"><div className="brand-logo"><span className="logo-mark">✦</span> CX Assist</div><nav aria-label="Main navigation"><button className={`nav-button ${page === 'conversations' ? 'active-nav' : ''}`} aria-current={page === 'conversations' ? 'page' : undefined} onClick={() => setPage('conversations')}>Conversations</button><button className={`nav-button ${page === 'knowledge' ? 'active-nav' : ''}`} aria-current={page === 'knowledge' ? 'page' : undefined} onClick={() => setPage('knowledge')}>Knowledge Base</button><button className={`nav-button ${page === 'design' ? 'active-nav' : ''}`} aria-current={page === 'design' ? 'page' : undefined} onClick={() => setPage('design')}>System Design</button></nav><div className="header-account"><span className="brand-label">{brands.length === 1 ? brands[0].name : 'Brand workspace'}</span><button className="secondary compact" onClick={signOut} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button></div></header>
     <div className="workspace-container">
       {error && <p className="error" role="alert">{error}</p>}
-      {brandError ? <p className="error" role="alert">{brandError}</p> : brands.length > 1 ? <p className="error" role="alert">Unexpected access to multiple brands. Check memberships before continuing.</p> : brands.length === 1 ? (page === 'conversations' ? <ConversationWorkspace key={session.user.id} brandName={brands[0].name} /> : <KnowledgeWorkspace key={session.user.id} brandId={brands[0].id} brandName={brands[0].name} />) : <section className="panel"><p role="status">{brandReady ? 'No assigned brand. Check this account’s membership.' : 'Loading brand access…'}</p></section>}
+      {brandError ? <p className="error" role="alert">{brandError}</p> : brands.length > 1 ? <p className="error" role="alert">Unexpected access to multiple brands. Check memberships before continuing.</p> : brands.length === 1 ? (page === 'conversations' ? <ConversationWorkspace key={session.user.id} brandName={brands[0].name} /> : page === 'design' ? <Suspense fallback={<p role="status">Loading architecture canvas...</p>}><SystemDesignWorkspace /></Suspense> : <KnowledgeWorkspace key={session.user.id} brandId={brands[0].id} brandName={brands[0].name} />) : <section className="panel"><p role="status">{brandReady ? 'No assigned brand. Check this account’s membership.' : 'Loading brand access…'}</p></section>}
     </div>
   </main>;
   return <main className="auth-page">

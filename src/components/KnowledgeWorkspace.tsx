@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createKnowledge, deleteKnowledge, loadKnowledge, updateKnowledge, type KnowledgeCategory, type KnowledgeEntry, type KnowledgeInput } from '../lib/knowledge';
 
+import { RetrievalTestPanel } from './RetrievalTestPanel';
+import { indexKnowledge } from '../lib/indexKnowledge';
+import { supabase } from '../lib/supabase';
+
+type IndexRecord = { entry_id: string; policy_version: number; embedding_model: string };
+const EMBEDDING_MODEL = 'gemini-embedding-001';
+
 const categories: KnowledgeCategory[] = ['products', 'returns', 'refunds', 'damage', 'shipping', 'cancellation'];
 const labels: Record<KnowledgeCategory, string> = { products: 'Products & brand', returns: 'Returns', refunds: 'Refunds', damage: 'Damaged items', shipping: 'Shipping', cancellation: 'Cancellation' };
 const blank: KnowledgeInput = { category: 'products', title: '', content: '' };
@@ -20,6 +27,16 @@ export function KnowledgeWorkspace({ brandId, brandName }: { brandId: string; br
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [reload, setReload] = useState(0);
+  const [indexes, setIndexes] = useState<IndexRecord[]>([]);
+  const [indexLoading, setIndexLoading] = useState(true);
+  const [indexStatusError, setIndexStatusError] = useState('');
+  const [indexingId, setIndexingId] = useState<string | null>(null);
+  const [indexErrors, setIndexErrors] = useState<Record<string, string>>({});
+  const [batch, setBatch] = useState<{ total: number; completed: number; indexed: number; skipped: number; failed: number; running: boolean; current: string } | null>(null);
+  const stopBatch = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; stopBatch.current = true; }; }, []);
+  const indexLock = useRef(false);
   const lock = useRef(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -28,6 +45,62 @@ export function KnowledgeWorkspace({ brandId, brandName }: { brandId: string; br
     loadKnowledge().then(rows => { if (active) setEntries(rows); }).catch(cause => { if (active) setError(errorText(cause)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [reload]);
+  useEffect(() => {
+    let active = true;
+    Promise.resolve(supabase.from('knowledge_embeddings').select('entry_id, policy_version, embedding_model')).then(({ data, error: failure }) => {
+      if (active) { setIndexes(data ?? []); setIndexStatusError(failure?.message ?? ''); }
+    }).catch(cause => { if (active) setIndexStatusError(errorText(cause)); }).finally(() => { if (active) setIndexLoading(false); });
+    return () => { active = false; };
+  }, [reload]);
+  async function indexEntry(entry: KnowledgeEntry) {
+    setIndexingId(entry.id);
+    setIndexErrors(previous => ({ ...previous, [entry.id]: '' }));
+    const result = await indexKnowledge(entry.id);
+    if (!result || !['indexed', 'already_indexed'].includes(result.status) || !Number.isInteger(result.version)) throw new Error('Unexpected indexing response. Refresh and verify the index.');
+    if (mounted.current) setIndexes(previous => [...previous.filter(row => row.entry_id !== entry.id), { entry_id: entry.id, policy_version: result.version, embedding_model: EMBEDDING_MODEL }]);
+    return result.status as 'indexed' | 'already_indexed';
+  }
+  async function handleIndex(entry: KnowledgeEntry) {
+    if (indexLock.current) return;
+    indexLock.current = true;
+    try {
+      const status = await indexEntry(entry);
+      if (mounted.current) setNotice(status === 'already_indexed' ? `${entry.title} is already indexed.` : `${entry.title} indexed successfully.`);
+    } catch (cause) { if (mounted.current) setIndexErrors(previous => ({ ...previous, [entry.id]: errorText(cause) })); }
+    finally { indexLock.current = false; if (mounted.current) setIndexingId(null); }
+  }
+  async function handleIndexAll() {
+    if (indexLock.current || !entries.length) return;
+    indexLock.current = true; stopBatch.current = false; setNotice('');
+    const queue = [...entries];
+    let progress = { total: queue.length, completed: 0, indexed: 0, skipped: 0, failed: 0, running: true, current: '' };
+    setBatch(progress);
+    try {
+      for (const entry of queue) {
+        if (stopBatch.current || !mounted.current) break;
+        progress = { ...progress, current: entry.title }; setBatch(progress);
+        try {
+          const status = await indexEntry(entry);
+          progress = { ...progress, completed: progress.completed + 1, indexed: progress.indexed + (status === 'indexed' ? 1 : 0), skipped: progress.skipped + (status === 'already_indexed' ? 1 : 0) };
+        } catch (cause) {
+          progress = { ...progress, completed: progress.completed + 1, failed: progress.failed + 1 };
+          if (mounted.current) setIndexErrors(previous => ({ ...previous, [entry.id]: errorText(cause) }));
+        }
+        if (mounted.current) setBatch(progress);
+      }
+    } finally {
+      indexLock.current = false;
+      if (mounted.current) { setIndexingId(null); setBatch({ ...progress, running: false, current: '' }); }
+    }
+  }
+  function indexLabel(entry: KnowledgeEntry) {
+    if (indexingId === entry.id) return 'Indexing...';
+    if (indexErrors[entry.id]) return 'Index failed';
+    if (indexLoading || indexStatusError) return 'Index status unknown';
+    const stored = indexes.find(row => row.entry_id === entry.id);
+    if (!stored) return 'Not indexed';
+    return stored.policy_version === entry.version && stored.embedding_model === EMBEDDING_MODEL ? 'Indexed' : 'Needs reindexing';
+  }
   useEffect(() => { if (editorOpen) titleRef.current?.focus(); }, [editorOpen]);
   useEffect(() => {
     if (!editorOpen && !deleting) return;
@@ -71,12 +144,15 @@ export function KnowledgeWorkspace({ brandId, brandName }: { brandId: string; br
   }
   const visible = entries.filter(entry => (filter === 'all' || entry.category === filter) && `${entry.title} ${entry.content}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => a.title.localeCompare(b.title));
   return <>
-    <div className="workspace-heading"><div><span className="eyebrow">BRAND KNOWLEDGE</span><h1>The source of every helpful answer.</h1><p className="muted">Manage policies and product information for {brandName}.</p></div><button onClick={() => open(null)}>+ Add entry</button></div>
+    <div className="workspace-heading"><div><span className="eyebrow">BRAND KNOWLEDGE</span><h1>The source of every helpful answer.</h1><p className="muted">Manage policies and product information for {brandName}.</p></div><div className="kb-heading-actions"><button className="secondary" onClick={() => void handleIndexAll()} disabled={loading || indexLoading || indexingId !== null || Boolean(batch?.running) || !entries.length}>{batch?.running ? 'Indexing policies...' : 'Index all policies'}</button><button onClick={() => open(null)} disabled={Boolean(batch?.running)}>+ Add entry</button></div></div>
+    {batch && <section className="panel batch-progress" aria-label="Policy indexing progress"><div className="panel-heading"><strong>{batch.running ? 'Indexing brand policies' : batch.completed === batch.total ? 'Indexing finished' : 'Indexing stopped'}</strong><span>{batch.completed} / {batch.total} processed</span></div><progress max={batch.total} value={batch.completed} aria-label="Policies processed" /><p role="status">{batch.running ? `${batch.current || 'Preparing'} - please keep this page open.` : `${batch.indexed} indexed, ${batch.skipped} already current, ${batch.failed} failed.${batch.failed ? ' Retry failed policies below.' : ''}`}</p>{batch.running && <button className="secondary compact" onClick={() => { stopBatch.current = true; }} >Stop after current policy</button>}</section>}
     {notice && <p className="kb-notice" role="status">{notice}</p>}
     {error && <p className="error" role="alert">{error} <button className="secondary compact" onClick={() => { setError(''); setLoading(true); setReload(value => value + 1); }}>Retry</button></p>}
+    {indexStatusError && <p className="error" role="alert">Could not read indexing status: {indexStatusError}</p>}
+    <RetrievalTestPanel />
     <div className="kb-layout"><aside className="panel kb-sidebar"><span className="eyebrow">CATEGORIES</span><button className={filter === 'all' ? 'kb-filter active' : 'kb-filter'} onClick={() => setFilter('all')}>All entries <span>{entries.length}</span></button>{categories.map(category => <button key={category} className={filter === category ? 'kb-filter active' : 'kb-filter'} onClick={() => setFilter(category)}>{labels[category]}<span>{entries.filter(entry => entry.category === category).length}</span></button>)}<p className="kb-sidebar-note">Policies are kept separate for each brand. Edits automatically update the entry version.</p></aside>
     <section><div className="kb-toolbar"><label className="sr-only" htmlFor="kb-search">Search knowledge</label><input id="kb-search" type="search" placeholder="Search policies and products…" value={search} onChange={event => setSearch(event.target.value)} /><span className="muted small">{visible.length} entries</span></div>
-    {loading ? <section className="panel" role="status">Loading knowledge…</section> : visible.length === 0 ? <section className="panel empty-state"><span className="empty-icon">▤</span><h3>{entries.length ? 'No matching entries' : 'Build your brand knowledge'}</h3><p>{entries.length ? 'Try another search or category.' : 'Add policies and product information to get started.'}</p></section> : <div className="kb-entry-grid">{visible.map(entry => <article className="panel kb-entry" key={entry.id}><div className="kb-entry-meta"><span className="badge">{labels[entry.category]}</span><span className="muted small">v{entry.version}</span></div><h2>{entry.title}</h2><p className="kb-content">{entry.content}</p><footer><span className="muted small">Updated {new Date(entry.updated_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })}</span><div><button className="secondary compact" onClick={() => open(entry)}>Edit</button><button className="kb-delete compact" onClick={() => { setDeleting(entry); setFormError(''); }}>Delete</button></div></footer></article>)}</div>}
+    {loading ? <section className="panel" role="status">Loading knowledge…</section> : visible.length === 0 ? <section className="panel empty-state"><span className="empty-icon">▤</span><h3>{entries.length ? 'No matching entries' : 'Build your brand knowledge'}</h3><p>{entries.length ? 'Try another search or category.' : 'Add policies and product information to get started.'}</p></section> : <div className="kb-entry-grid">{visible.map(entry => <article className="panel kb-entry" key={entry.id}><div className="kb-entry-meta"><span className="badge">{labels[entry.category]}</span><span className="muted small">v{entry.version}</span></div><div className="index-status" role="status">{indexLabel(entry)}</div><h2>{entry.title}</h2><p className="kb-content">{entry.content}</p><div className="index-controls"><button className="secondary compact" disabled={indexingId !== null || indexLoading || Boolean(batch?.running)} onClick={() => void handleIndex(entry)}>{indexingId === entry.id ? 'Indexing?' : indexLabel(entry) === 'Indexed' ? 'Check index' : 'Index policy'}</button>{indexErrors[entry.id] && <p className="error" role="alert">{indexErrors[entry.id]}</p>}</div><footer><span className="muted small">Updated {new Date(entry.updated_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })}</span><div><button className="secondary compact" disabled={indexingId === entry.id || Boolean(batch?.running)} onClick={() => open(entry)}>Edit</button><button className="kb-delete compact" disabled={indexingId === entry.id || Boolean(batch?.running)} onClick={() => { setDeleting(entry); setFormError(''); }}>Delete</button></div></footer></article>)}</div>}
     </section></div>
     {editorOpen && <div className="modal-backdrop"><section className="panel kb-modal" role="dialog" aria-modal="true" aria-labelledby="editor-title" onKeyDown={event => { if (event.key === 'Escape') close(); }}><div className="panel-heading"><h2 id="editor-title">{editing ? 'Edit knowledge entry' : 'Add knowledge entry'}</h2><button className="secondary compact" onClick={close} disabled={busy}>Cancel</button></div><p className="muted small">{brandName}{editing ? ` · Editing version ${editing.version}` : ''}</p><form onSubmit={save}><label htmlFor="entry-title">Title</label><input ref={titleRef} id="entry-title" value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} required disabled={busy} /><label htmlFor="entry-category">Category</label><select id="entry-category" value={form.category} onChange={event => setForm({ ...form, category: event.target.value as KnowledgeCategory })} disabled={busy}>{categories.map(category => <option key={category} value={category}>{labels[category]}</option>)}</select><label htmlFor="entry-content">Policy or product information</label><textarea id="entry-content" rows={9} maxLength={20000} required value={form.content} onChange={event => setForm({ ...form, content: event.target.value })} disabled={busy} /><span className="muted small">{form.content.length.toLocaleString()} / 20,000 characters</span>{formError && <p className="error" role="alert">{formError}</p>}<button type="submit" disabled={busy || !form.title.trim() || !form.content.trim()}>{busy ? 'Saving…' : 'Save entry'}</button></form></section></div>}
     {deleting && <div className="modal-backdrop"><section className="panel kb-modal delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-title"><h2 id="delete-title">Delete this entry?</h2><p className="muted">“{deleting.title}” will be removed from {brandName}’s knowledge base. This cannot be undone.</p>{formError && <p className="error" role="alert">{formError}</p>}<div className="delete-actions"><button autoFocus className="secondary" onClick={() => setDeleting(null)} disabled={busy}>Keep entry</button><button className="danger-button" onClick={remove} disabled={busy}>{busy ? 'Deleting…' : 'Delete entry'}</button></div></section></div>}

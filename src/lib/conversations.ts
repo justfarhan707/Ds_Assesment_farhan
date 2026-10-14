@@ -7,6 +7,7 @@ export async function loadConversations() {
       id,
       brand_id,
       auto_reply_enabled,
+      closed_at,
       customers (
         id,
         name
@@ -22,6 +23,7 @@ export async function loadConversations() {
         delivered_at
       )
     `)
+        .is('closed_at', null)
         .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -74,4 +76,10 @@ export async function sendMessage(input: SendMessageInput) {
     if (error) throw error;
 
     return data;
+}
+export async function endConversationSession(conversationId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('end_conversation_session', { p_conversation_id: conversationId });
+  if (error) throw new Error(error.message);
+  if (typeof data !== 'string') throw new Error('Unexpected session response.');
+  return data;
 }

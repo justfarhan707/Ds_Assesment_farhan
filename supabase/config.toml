@@ -413,3 +413,32 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+[functions.index-knowledge]
+enabled = true
+verify_jwt = false
+import_map = "./functions/index-knowledge/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/index-knowledge/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/index-knowledge/*.html" ]
+
+[functions.retrieve-knowledge]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/retrieve-knowledge/index.ts"
+import_map = "./functions/retrieve-knowledge/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/retrieve-knowledge/*.html" ]
+
+[functions.generate-reply]
+enabled = true
+# Authentication is validated inside the handler with auth.getUser().
+verify_jwt = false
+entrypoint = "./functions/generate-reply/index.ts"
+import_map = "./functions/generate-reply/deno.json"
