@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-// THis whole file in node js equivalant 
+// THis whole file in express equivalant 
 //app.post('/index-knowledge', async (req, res) => {
 // 1. Authenticate the user
 // 2. Fetch the policy from the database

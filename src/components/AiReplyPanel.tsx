@@ -49,7 +49,6 @@ export function AiReplyPanel({ conversationId, latestMessageId, latestRole, disa
   return <aside className="panel ai-panel" aria-busy={busy || approving}>
     <div className="panel-heading"><h2><span className="sparkle">✦</span> AI reply</h2><span className="badge">{generation ? generation.answerability === 'supported' ? 'Evidence selected' : 'Needs review' : 'Ready'}</span></div>
     {previousConversationId && <p className="ai-footnote">Follow-up context: selected closed session {previousConversationId.slice(0, 8)}.</p>}
-    <div className="automation-row"><div><strong>Auto-reply</strong><p className="muted small">Agent approval is currently required</p></div><button className="toggle-off" disabled aria-label="Auto-reply unavailable"><span /></button></div>
     <button className="generate-button" disabled={busy || approving || !canGenerate} onClick={() => void generate(true)}>{busy ? 'Generating reply...' : 'Generate reply'}</button>
     {!canGenerate && !disabled && <p className="ai-footnote">Send a customer message to begin.</p>}
     {busy && <p className="muted small" role="status">Retrieving policies and drafting your reply. This may take a moment.</p>}

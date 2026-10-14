@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import { ConversationWorkspace } from './components/ConversationWorkspace';
 import './App.css';
+import { demoAccounts } from './demoAccounts';
 import { KnowledgeWorkspace } from './components/KnowledgeWorkspace';
 
 const SystemDesignWorkspace = lazy(() => import('./components/SystemDesignWorkspace'));
@@ -64,7 +65,7 @@ function App() {
   return <main className="auth-page">
     <header className="app-header"><div className="brand-logo"><span className="logo-mark">✦</span> CX Assist</div><span>Agent workspace</span></header>
     <section className="auth-card" aria-busy={busy || !ready}>
-      {!ready ? <p role="status">Restoring your session…</p> : <><span className="eyebrow">WELCOME BACK</span><h1>Sign in to CX Assist</h1><p className="muted">Use your assigned agent account to access your brand.</p><form onSubmit={signIn}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} required disabled={busy} /><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required disabled={busy} /><button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form></>}
+      {!ready ? <p role="status">Restoring your session…</p> : <><span className="eyebrow">WELCOME BACK</span><h1>Sign in to CX Assist</h1><p className="muted">Explore either store using its demo agent account.</p><section className="demo-access" aria-label="Demo store accounts"><span className="eyebrow">REVIEWER ACCESS</span>{demoAccounts.map(account => <article className="demo-account" key={account.email}><div><strong>{account.brand}</strong><p>{account.email}</p><p>Password: {account.password ? <code>{account.password}</code> : <span>Awaiting demo password</span>}</p></div><button type="button" className="secondary compact" disabled={busy} onClick={() => { setEmail(account.email); setPassword(account.password); setError(''); }}>Use account</button></article>)}</section><form onSubmit={signIn}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} required disabled={busy} /><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required disabled={busy} /><button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form></>}
       {error && <p className="error" role="alert">{error}</p>}
     </section>
   </main>;

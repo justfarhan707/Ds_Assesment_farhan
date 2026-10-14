@@ -277,3 +277,9 @@ form.customer-chat-composer { display: grid; grid-template-columns: 1fr auto; al
 .customer-chat-footer p { font-size: 11px; color: var(--text-muted); }
 .customer-end-session { background: transparent; color: #667085; border: 1px solid #dce2ed; padding: 8px 12px; font-size: 12px; }
 @media(max-width: 700px) { .customer-view-banner { flex-direction: column; align-items: flex-start; } .customer-chat-header { flex-wrap: wrap; } .customer-chat-header-actions { width: 100%; margin: 0; } .customer-chat-history { padding: 18px; } .customer-chat-bubble { max-width: 92%; } form.customer-chat-composer { grid-template-columns: 1fr; } .customer-chat-composer button { min-height: 42px; } .customer-chat-footer { flex-wrap: wrap; } }
+.demo-access { margin-top: 24px; padding: 16px; background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: 10px; }
+.demo-account { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; }
+.demo-account + .demo-account { border-top: 1px solid var(--panel-border); }
+.demo-account strong { font-size: 13px; }
+.demo-account p { font-size: 11px; color: var(--text-muted); margin: 6px 0 0; overflow-wrap: anywhere; }
+.demo-account code { color: var(--text-strong); }
